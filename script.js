@@ -185,38 +185,47 @@ function createBoard() {
 
 function createKeyboard() {
   keyboardElement.innerHTML = "";
-  const rows = ["QWERTYUIOP", "ASDFGHJKL", "ENTERZXCVBNM⌫"];
+
+  const rows = [
+    "QWERTYUIOP",
+    "ASDFGHJKL",
+    "ZXCVBNM"
+  ];
 
   rows.forEach((rowStr, rowIndex) => {
     const rowDiv = document.createElement("div");
     rowDiv.className = "keyboard-row";
 
+    if (rowIndex === 2) {
+      // ENTER key first
+      const enterBtn = document.createElement("button");
+      enterBtn.className = "key wide";
+      enterBtn.textContent = "ENTER";
+      enterBtn.dataset.key = "ENTER";
+      rowDiv.appendChild(enterBtn);
+    }
+
     for (const char of rowStr) {
       const button = document.createElement("button");
       button.className = "key";
-
-      if (char === "⌫") {
-        button.textContent = "⌫";
-        button.dataset.key = "BACKSPACE";
-        button.classList.add("wide");
-      } else if (char === "E" && rowIndex === 2) {
-        // ENTER at start of last row
-        button.textContent = "ENTER";
-        button.dataset.key = "ENTER";
-        button.classList.add("wide");
-        rowDiv.appendChild(button);
-        continue;
-      } else {
-        button.textContent = char;
-        button.dataset.key = char;
-      }
-
+      button.textContent = char;
+      button.dataset.key = char;
       rowDiv.appendChild(button);
+    }
+
+    if (rowIndex === 2) {
+      // BACKSPACE key at the end
+      const backBtn = document.createElement("button");
+      backBtn.className = "key wide";
+      backBtn.textContent = "⌫";
+      backBtn.dataset.key = "BACKSPACE";
+      rowDiv.appendChild(backBtn);
     }
 
     keyboardElement.appendChild(rowDiv);
   });
 }
+
 
 function getTile(row, col) {
   return boardElement.querySelector(`.tile[data-row="${row}"][data-col="${col}"]`);
@@ -334,6 +343,12 @@ function computeResult(guess, answer) {
 function revealGuess(guess, answer, rowIndex) {
   const result = computeResult(guess, answer);
 
+  // 1) Update keyboard colours first, based on the full result
+  for (let i = 0; i < WORD_LENGTH; i++) {
+    updateKeyboardKey(guess[i], result[i]);
+  }
+
+  // 2) Then animate the tiles using that result
   for (let i = 0; i < WORD_LENGTH; i++) {
     const tile = getTile(rowIndex, i);
     const inner = tile.querySelector(".tile-inner");
@@ -345,15 +360,16 @@ function revealGuess(guess, answer, rowIndex) {
         tile.classList.remove("reveal");
         tile.classList.add(status);
         inner.textContent = guess[i];
-        updateKeyboardKey(guess[i], status);
       }, 100);
     }, i * 300);
   }
 
+  // 3) Finally, check win/lose after the animation
   setTimeout(() => {
     handleEndOfGuess(guess, result);
   }, WORD_LENGTH * 300 + 150);
 }
+
 
 function updateKeyboardKey(letter, status) {
   const keyButton = keyboardElement.querySelector(`.key[data-key="${letter}"]`);
