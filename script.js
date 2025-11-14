@@ -22,6 +22,8 @@ const statCurrentStreak = document.getElementById("stat-current-streak");
 const statMaxStreak = document.getElementById("stat-max-streak");
 const guessDistributionElement = document.getElementById("guess-distribution");
 
+const resetButton = document.getElementById("reset-button");
+
 // Word lists
 let WORD_LIST = [];
 let SOLUTIONS = [];
@@ -412,6 +414,37 @@ function handleEndOfGuess(guess, result) {
   saveGame();
 }
 
+function resetPuzzle() {
+  // Pick a completely random word for testing
+  const randomIndex = Math.floor(Math.random() * SOLUTIONS.length);
+  solution = SOLUTIONS[randomIndex];
+  solutionDate = getTodayString() + "#test"; // mark it as a test game
+
+  currentRow = 0;
+  currentCol = 0;
+  guesses = Array(MAX_GUESSES)
+    .fill("")
+    .map(() => Array(WORD_LENGTH).fill(""));
+  gameStatus = "IN_PROGRESS";
+
+  // Clear board UI
+  document.querySelectorAll(".tile").forEach(tile => {
+    tile.classList.remove("correct", "present", "absent", "filled", "reveal");
+    const inner = tile.querySelector(".tile-inner");
+    if (inner) inner.textContent = "";
+  });
+
+  // Clear keyboard UI
+  document.querySelectorAll(".key").forEach(key => {
+    key.classList.remove("correct", "present", "absent");
+    delete key.dataset.status;
+  });
+
+  clearMessage();
+  saveGame();
+}
+
+
 // --- Stats logic ---
 
 function updateStats(isWin) {
@@ -504,6 +537,9 @@ function setupEventListeners() {
   statsButton.addEventListener("click", openStats);
   closeStatsButton.addEventListener("click", closeStats);
   modalBackdrop.addEventListener("click", closeStats);
+
+  // 👇 New
+  resetButton.addEventListener("click", resetPuzzle);
 }
 
 // --- Restore from saved state ---
