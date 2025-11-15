@@ -5,8 +5,14 @@
 // =====================
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 6;
-const STORAGE_KEY = "wordleCloneStateV3";
+const STORAGE_KEY = "wordleCloneStateV4";
 const STATS_KEY = "wordleCloneStatsV2";
+const COLORBLIND_KEY = "wordleColorblindV1";
+const MODE_KEY = "wordleGameModeV1";
+
+// Animation timings (approx Wordle-ish)
+const FLIP_STAGGER = 250;    // ms between each tile flip in a row
+const FLIP_DURATION = 250;   // ms for each tile flip
 
 // =====================
 // DOM elements
@@ -27,6 +33,12 @@ const statCurrentStreak = document.getElementById("stat-current-streak");
 const statMaxStreak = document.getElementById("stat-max-streak");
 const guessDistributionElement = document.getElementById("guess-distribution");
 
+// New controls
+const colorblindToggle = document.getElementById("colorblind-toggle");
+const modePracticeBtn = document.getElementById("mode-practice");
+const modeDailyBtn = document.getElementById("mode-daily");
+const shareButton = document.getElementById("share-button");
+
 // =====================
 // Word lists
 // =====================
@@ -38,12 +50,17 @@ let VALID_GUESSES = new Set(); // for quick lookup
 // Game state
 // =====================
 let solution = "";
+let solutionDate = null; // used for daily mode
 let currentRow = 0;
 let currentCol = 0;
 let guesses = Array(MAX_GUESSES)
   .fill("")
   .map(() => Array(WORD_LENGTH).fill(""));
 let gameStatus = "IN_PROGRESS"; // "IN_PROGRESS" | "WIN" | "LOSE"
+
+// Mode & settings
+let gameMode = "PRACTICE";     // "PRACTICE" | "DAILY"
+let colorblindMode = false;
 
 // =====================
 // Stats
@@ -60,12 +77,34 @@ let stats = {
 // =====================
 // Utility
 // =====================
+function getTodayString() {
+  const now = new Date();
+  return now.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
 function pickRandomSolution() {
   if (!SOLUTIONS.length) {
     throw new Error("No solutions loaded");
   }
   const idx = Math.floor(Math.random() * SOLUTIONS.length);
   return SOLUTIONS[idx];
+}
+
+function pickDailySolution() {
+  const today = getTodayString();
+  if (!SOLUTIONS.length) {
+    throw new Error("No solutions loaded");
+  }
+
+  let hash = 0;
+  for (const char of today) {
+    hash = (hash * 31 + char.charCodeAt(0)) % SOLUTIONS.length;
+  }
+
+  return {
+    solution: SOLUTIONS[hash],
+    date: today
+  };
 }
 
 // =====================
@@ -87,6 +126,50 @@ async function loadWordList() {
     );
     SOLUTIONS = WORD_LIST;
     VALID_GUESSES = new Set(WORD_LIST);
+  }
+}
+
+// =====================
+// Settings persistence (mode + colorblind)
+// =====================
+function loadSettings() {
+  try {
+    const cb = localStorage.getItem(COLORBLIND_KEY);
+    if (cb === "1") {
+      colorblindMode = true;
+      document.body.classList.add("colorblind");
+      if (colorblindToggle) colorblindToggle.checked = true;
+    }
+
+    const storedMode = localStorage.getItem(MODE_KEY);
+    if (storedMode === "DAILY" || storedMode === "PRACTICE") {
+      gameMode = storedMode;
+    }
+
+    updateModeButtons();
+  } catch (err) {
+    console.error("Failed to load settings", err);
+  }
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(COLORBLIND_KEY, colorblindMode ? "1" : "0");
+    localStorage.setItem(MODE_KEY, gameMode);
+  } catch (err) {
+    console.error("Failed to save settings", err);
+  }
+}
+
+function updateModeButtons() {
+  if (!modePracticeBtn || !modeDailyBtn) return;
+
+  if (gameMode === "PRACTICE") {
+    modePracticeBtn.classList.add("active");
+    modeDailyBtn.classList.remove("active");
+  } else {
+    modeDailyBtn.classList.add("active");
+    modePracticeBtn.classList.remove("active");
   }
 }
 
@@ -122,46 +205,15 @@ function saveStats() {
 // =====================
 // Game persistence
 // =====================
-function loadGame() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      // No saved game: start a fresh random one
-      solution = pickRandomSolution();
-      return;
-    }
-
-    const parsed = JSON.parse(stored);
-    if (!parsed || !parsed.solution) {
-      solution = pickRandomSolution();
-      return;
-    }
-
-    // Restore saved state
-    solution = parsed.solution;
-    guesses = parsed.guesses || guesses;
-    currentRow = parsed.currentRow || 0;
-    currentCol = parsed.currentCol || 0;
-    gameStatus = parsed.gameStatus || "IN_PROGRESS";
-
-    // Recompute row/col properly to fix "start on row 2" bug
-    normaliseCurrentRow();
-
-  } catch (err) {
-    console.error("Failed to load game, starting new:", err);
-    solution = pickRandomSolution();
-  }
-}
-
-
-
 function saveGame() {
   const data = {
     solution,
+    solutionDate,
     currentRow,
     currentCol,
     guesses,
-    gameStatus
+    gameStatus,
+    gameMode
   };
 
   try {
@@ -187,6 +239,83 @@ function normaliseCurrentRow() {
   currentCol = WORD_LENGTH;
 }
 
+function startNewGameForCurrentMode() {
+  if (gameMode === "DAILY") {
+    const daily = pickDailySolution();
+    solution = daily.solution;
+    solutionDate = daily.date;
+  } else {
+    solution = pickRandomSolution();
+    solutionDate = null;
+  }
+
+  currentRow = 0;
+  currentCol = 0;
+  guesses = Array(MAX_GUESSES)
+    .fill("")
+    .map(() => Array(WORD_LENGTH).fill(""));
+  gameStatus = "IN_PROGRESS";
+
+  // Clear board UI
+  document.querySelectorAll(".tile").forEach(tile => {
+    tile.className = "tile";
+    const inner = tile.querySelector(".tile-inner");
+    if (inner) inner.textContent = "";
+  });
+
+  // Clear keyboard UI
+  document.querySelectorAll(".key").forEach(key => {
+    key.classList.remove("correct", "present", "absent");
+    delete key.dataset.status;
+  });
+
+  clearMessage();
+  saveGame();
+  updateShareButtonState();
+}
+
+function loadGame() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      startNewGameForCurrentMode();
+      return;
+    }
+
+    const parsed = JSON.parse(stored);
+    if (!parsed || !parsed.solution) {
+      startNewGameForCurrentMode();
+      return;
+    }
+
+    // If saved mode doesn't match current mode, start fresh for this mode
+    if (parsed.gameMode && parsed.gameMode !== gameMode) {
+      startNewGameForCurrentMode();
+      return;
+    }
+
+    solution = parsed.solution;
+    solutionDate = parsed.solutionDate || null;
+    guesses = parsed.guesses || guesses;
+    currentRow = parsed.currentRow || 0;
+    currentCol = parsed.currentCol || 0;
+    gameStatus = parsed.gameStatus || "IN_PROGRESS";
+
+    // For daily mode, if saved solution isn't today's, start fresh
+    if (gameMode === "DAILY") {
+      const today = getTodayString();
+      if (solutionDate !== today) {
+        startNewGameForCurrentMode();
+        return;
+      }
+    }
+
+    normaliseCurrentRow();
+  } catch (err) {
+    console.error("Failed to load game, starting new:", err);
+    startNewGameForCurrentMode();
+  }
+}
 
 // =====================
 // UI creation
@@ -349,7 +478,7 @@ function submitGuess() {
 }
 
 // =====================
-// Result logic (green/yellow/grey)
+// Result logic (green/yellow/red)
 // =====================
 function computeResult(guess, answer) {
   const result = Array(WORD_LENGTH).fill("absent");
@@ -403,14 +532,14 @@ function revealGuess(guess, answer, rowIndex) {
         tile.classList.remove("reveal");
         tile.classList.add(status); // hooks into CSS
         inner.textContent = guess[i];
-      }, 100);
-    }, i * 300);
+      }, FLIP_DURATION / 2);
+    }, i * FLIP_STAGGER);
   }
 
   // 3) After animation finishes, handle win/lose
   setTimeout(() => {
     handleEndOfGuess(guess, result);
-  }, WORD_LENGTH * 300 + 180);
+  }, WORD_LENGTH * FLIP_STAGGER + FLIP_DURATION);
 }
 
 // Prioritise correct > present > absent for keyboard
@@ -439,6 +568,7 @@ function handleEndOfGuess(guess, result) {
     updateStats(true);
     saveStats();
     saveGame();
+    updateShareButtonState();
     return;
   }
 
@@ -452,6 +582,7 @@ function handleEndOfGuess(guess, result) {
     updateStats(false);
     saveStats();
     saveGame();
+    updateShareButtonState();
     return;
   }
 
@@ -512,6 +643,82 @@ function updateStatsUI() {
 }
 
 // =====================
+// Share grid
+// =====================
+function updateShareButtonState() {
+  if (!shareButton) return;
+  const hasGuess = guesses.some(row => row.join("").length > 0);
+  shareButton.disabled = gameStatus === "IN_PROGRESS" || !hasGuess;
+}
+
+function buildShareText() {
+  const attempts = gameStatus === "WIN" ? currentRow + 1 : "X";
+  const modeLabel = gameMode === "DAILY" ? "Daily" : "Practice";
+  const title = `Wordle Clone ${attempts}/${MAX_GUESSES} (${modeLabel})`;
+
+  const emojiMap = colorblindMode
+    ? { correct: "🟧", present: "🟦", absent: "⬛" }
+    : { correct: "🟩", present: "🟨", absent: "⬛" };
+
+  const lines = [];
+  for (let row = 0; row < MAX_GUESSES; row++) {
+    const guess = wordFromRow(row);
+    if (!guess || guess.length !== WORD_LENGTH) break;
+    const result = computeResult(guess, solution);
+    const line = result.map(r => emojiMap[r] || emojiMap.absent).join("");
+    lines.push(line);
+  }
+
+  return `${title}\n${lines.join("\n")}`;
+}
+
+async function shareResult() {
+  if (gameStatus === "IN_PROGRESS") {
+    showMessage("Finish the game before sharing.", true);
+    return;
+  }
+
+  const text = buildShareText();
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    showMessage("Result copied to clipboard! 📋");
+  } catch (err) {
+    console.error("Failed to copy share text", err);
+    showMessage("Couldn't copy result.", true);
+  }
+}
+
+// =====================
+// Mode change & reset
+// =====================
+function resetPuzzle() {
+  startNewGameForCurrentMode();
+}
+
+function setGameMode(mode) {
+  if (mode !== "PRACTICE" && mode !== "DAILY") return;
+  if (gameMode === mode) return;
+
+  gameMode = mode;
+  updateModeButtons();
+  saveSettings();
+  startNewGameForCurrentMode();
+}
+
+// =====================
 // Modal UI
 // =====================
 function openStats() {
@@ -523,37 +730,6 @@ function openStats() {
 function closeStats() {
   statsModal.classList.add("d-none");
   modalBackdrop.classList.add("d-none");
-}
-
-// =====================
-// Reset / New random game
-// =====================
-function resetPuzzle() {
-  // Pick a completely new random solution
-  solution = pickRandomSolution();
-
-  currentRow = 0;
-  currentCol = 0;
-  guesses = Array(MAX_GUESSES)
-    .fill("")
-    .map(() => Array(WORD_LENGTH).fill(""));
-  gameStatus = "IN_PROGRESS";
-
-  // Clear board UI
-  document.querySelectorAll(".tile").forEach(tile => {
-    tile.classList.remove("correct", "present", "absent", "filled", "reveal");
-    const inner = tile.querySelector(".tile-inner");
-    if (inner) inner.textContent = "";
-  });
-
-  // Clear keyboard UI
-  document.querySelectorAll(".key").forEach(key => {
-    key.classList.remove("correct", "present", "absent");
-    delete key.dataset.status;
-  });
-
-  clearMessage();
-  saveGame();
 }
 
 // =====================
@@ -591,6 +767,23 @@ function setupEventListeners() {
   if (resetButton) {
     resetButton.addEventListener("click", resetPuzzle);
   }
+
+  if (colorblindToggle) {
+    colorblindToggle.addEventListener("change", () => {
+      colorblindMode = colorblindToggle.checked;
+      document.body.classList.toggle("colorblind", colorblindMode);
+      saveSettings();
+    });
+  }
+
+  if (modePracticeBtn && modeDailyBtn) {
+    modePracticeBtn.addEventListener("click", () => setGameMode("PRACTICE"));
+    modeDailyBtn.addEventListener("click", () => setGameMode("DAILY"));
+  }
+
+  if (shareButton) {
+    shareButton.addEventListener("click", shareResult);
+  }
 }
 
 // =====================
@@ -600,9 +793,10 @@ function restoreBoardFromState() {
   updateBoard();
 
   // Colour already-submitted guesses
-  for (let row = 0; row < currentRow; row++) {
+  for (let row = 0; row < MAX_GUESSES; row++) {
     const guess = wordFromRow(row);
     if (!guess || guess.length !== WORD_LENGTH) continue;
+    if (row >= currentRow && gameStatus === "IN_PROGRESS") break;
 
     const result = computeResult(guess, solution);
     for (let i = 0; i < WORD_LENGTH; i++) {
@@ -620,18 +814,20 @@ function restoreBoardFromState() {
   } else if (gameStatus === "LOSE") {
     showMessage(`Out of tries! The word was ${solution.toUpperCase()}`);
   }
+
+  updateShareButtonState();
 }
 
 // =====================
 // Bootstrap the game
 // =====================
 async function bootstrapGame() {
-  await loadWordList();   // load word list first
-  loadStats();            // restore stats
-  // Create UI before restoring game so tiles/keys exist
+  await loadWordList();
+  loadStats();
+  loadSettings();
   createBoard();
   createKeyboard();
-  loadGame();             // restore or start random game
+  loadGame();
   setupEventListeners();
   restoreBoardFromState();
 }

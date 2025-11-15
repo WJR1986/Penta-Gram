@@ -6,8 +6,7 @@
   --text: #ffffff;
   --correct: #538d4e;
   --present: #b59f3b;
-  --absent: #b00020;
-  /* Wordle-style red */
+  --absent: #b00020; /* red for incorrect */
   --keyboard-bg: #818384;
   --keyboard-text: #ffffff;
   --accent: #538d4e;
@@ -27,7 +26,59 @@ body {
   letter-spacing: 0.15em;
 }
 
-/* Board */
+/* =========================
+   Logo + header text
+   ========================= */
+
+.game-logo {
+  /* base size: small/mobile */
+  width: 40px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.25));
+}
+
+/* tablets / small devices */
+@media (min-width: 576px) {
+  .game-logo {
+    width: 110px;
+  }
+}
+
+/* laptops / desktops */
+@media (min-width: 768px) {
+  .game-logo {
+    width: 130px;
+  }
+}
+
+/* large desktops */
+@media (min-width: 1200px) {
+  .game-logo {
+    width: 150px;
+  }
+}
+
+.game-title {
+  letter-spacing: 0.12em;
+}
+
+.game-subtitle {
+  opacity: 0.8;
+}
+
+/* =========================
+   Settings bar
+   ========================= */
+
+.settings-bar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.35rem;
+}
+
+/* =========================
+   Board
+   ========================= */
 
 .board {
   display: grid;
@@ -35,7 +86,7 @@ body {
   grid-gap: 0.25rem;
   width: 100%;
   max-width: 360px;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .board-row {
@@ -71,6 +122,8 @@ body {
   border-color: var(--tile-border);
 }
 
+/* Flip animation */
+
 .tile.reveal {
   transform: rotateX(90deg);
 }
@@ -99,7 +152,9 @@ body {
   color: var(--error);
 }
 
-/* Keyboard */
+/* =========================
+   Keyboard
+   ========================= */
 
 .keyboard {
   display: grid;
@@ -158,7 +213,9 @@ body {
   background: var(--absent);
 }
 
-/* Modal (custom) */
+/* =========================
+   Modal (custom)
+   ========================= */
 
 .modal-backdrop {
   position: fixed;
@@ -186,7 +243,9 @@ body {
   position: relative;
 }
 
-/* Guess distribution */
+/* =========================
+   Guess distribution
+   ========================= */
 
 .guess-distribution {
   display: flex;
@@ -217,7 +276,9 @@ body {
   font-size: 0.75rem;
 }
 
-/* Utility */
+/* =========================
+   Utility
+   ========================= */
 
 .d-none {
   display: none !important;
@@ -234,16 +295,11 @@ body {
   }
 }
 
+/* =========================
+   Color-blind mode
+   ========================= */
 
-/* Reduce gap between board and keyboard */
-.game {
-  justify-content: flex-start !important;
-}
-
-.board-container {
-  margin-bottom: 1rem !important;
-}
-
-.keyboard-container {
-  margin-top: 0 !important;
+body.colorblind {
+  --correct: #f5793a; /* orange */
+  --present: #85c0f9; /* blue */
 }
