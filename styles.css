@@ -6,7 +6,8 @@
   --text: #ffffff;
   --correct: #538d4e;
   --present: #b59f3b;
-  --absent: #3a3a3c;
+  --absent: #b00020;
+  /* Wordle-style red */
   --keyboard-bg: #818384;
   --keyboard-text: #ffffff;
   --accent: #538d4e;
@@ -236,13 +237,13 @@ body {
 
 /* Reduce gap between board and keyboard */
 .game {
-    justify-content: flex-start !important;
+  justify-content: flex-start !important;
 }
 
 .board-container {
-    margin-bottom: 1rem !important;
+  margin-bottom: 1rem !important;
 }
 
 .keyboard-container {
-    margin-top: 0 !important;
+  margin-top: 0 !important;
 }

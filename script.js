@@ -137,16 +137,23 @@ function loadGame() {
       return;
     }
 
+    // Restore saved state
     solution = parsed.solution;
+    guesses = parsed.guesses || guesses;
     currentRow = parsed.currentRow || 0;
     currentCol = parsed.currentCol || 0;
-    guesses = parsed.guesses || guesses;
     gameStatus = parsed.gameStatus || "IN_PROGRESS";
+
+    // Recompute row/col properly to fix "start on row 2" bug
+    normaliseCurrentRow();
+
   } catch (err) {
     console.error("Failed to load game, starting new:", err);
     solution = pickRandomSolution();
   }
 }
+
+
 
 function saveGame() {
   const data = {
@@ -163,6 +170,23 @@ function saveGame() {
     console.error("Failed to save game", err);
   }
 }
+
+function normaliseCurrentRow() {
+  if (gameStatus !== "IN_PROGRESS") return;
+
+  for (let row = 0; row < MAX_GUESSES; row++) {
+    const word = guesses[row].join("");
+    if (word.length < WORD_LENGTH) {
+      currentRow = row;
+      currentCol = word.length;
+      return;
+    }
+  }
+
+  currentRow = MAX_GUESSES - 1;
+  currentCol = WORD_LENGTH;
+}
+
 
 // =====================
 // UI creation
