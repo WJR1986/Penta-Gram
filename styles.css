@@ -232,3 +232,17 @@ body {
     font-size: 0.75rem;
   }
 }
+
+
+/* Reduce gap between board and keyboard */
+.game {
+    justify-content: flex-start !important;
+}
+
+.board-container {
+    margin-bottom: 1rem !important;
+}
+
+.keyboard-container {
+    margin-top: 0 !important;
+}
