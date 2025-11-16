@@ -5,14 +5,15 @@
 // =====================
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 6;
-const STORAGE_KEY = "wordleCloneStateV4";
+const STORAGE_KEY = "wordleCloneStateV4"; // last game (any mode)
 const STATS_KEY = "wordleCloneStatsV2";
 const COLORBLIND_KEY = "wordleColorblindV1";
 const MODE_KEY = "wordleGameModeV1";
+const DAILY_META_KEY = "wordleDailyMetaV1"; // NEW: tracks if today's daily is finished
 
-// Animation timings (approx Wordle-ish)
-const FLIP_STAGGER = 250;    // ms between each tile flip in a row
-const FLIP_DURATION = 250;   // ms for each tile flip
+// Animation timings
+const FLIP_STAGGER = 250;
+const FLIP_DURATION = 250;
 
 // =====================
 // DOM elements
@@ -33,7 +34,6 @@ const statCurrentStreak = document.getElementById("stat-current-streak");
 const statMaxStreak = document.getElementById("stat-max-streak");
 const guessDistributionElement = document.getElementById("guess-distribution");
 
-// New controls
 const colorblindToggle = document.getElementById("colorblind-toggle");
 const modePracticeBtn = document.getElementById("mode-practice");
 const modeDailyBtn = document.getElementById("mode-daily");
@@ -42,15 +42,15 @@ const shareButton = document.getElementById("share-button");
 // =====================
 // Word lists
 // =====================
-let WORD_LIST = [];      // keep for compatibility; same as SOLUTIONS
-let SOLUTIONS = [];      // words that can be the answer (from wordle.json)
-let VALID_GUESSES = new Set(); // solutions + allowed-guesses.json
+let WORD_LIST = [];
+let SOLUTIONS = [];
+let VALID_GUESSES = new Set();
 
 // =====================
 // Game state
 // =====================
 let solution = "";
-let solutionDate = null; // used for daily mode
+let solutionDate = null; // YYYY-MM-DD for daily mode
 let currentRow = 0;
 let currentCol = 0;
 let guesses = Array(MAX_GUESSES)
@@ -58,8 +58,7 @@ let guesses = Array(MAX_GUESSES)
   .map(() => Array(WORD_LENGTH).fill(""));
 let gameStatus = "IN_PROGRESS"; // "IN_PROGRESS" | "WIN" | "LOSE"
 
-// Mode & settings
-let gameMode = "PRACTICE";     // "PRACTICE" | "DAILY"
+let gameMode = "PRACTICE"; // "PRACTICE" | "DAILY"
 let colorblindMode = false;
 
 // =====================
@@ -70,7 +69,6 @@ let stats = {
   wins: 0,
   currentStreak: 0,
   maxStreak: 0,
-  // index 0 = solved in 1 guess, index 5 = solved in 6 guesses
   guessDistribution: [0, 0, 0, 0, 0, 0]
 };
 
@@ -79,76 +77,59 @@ let stats = {
 // =====================
 function getTodayString() {
   const now = new Date();
-  return now.toISOString().slice(0, 10); // YYYY-MM-DD
+  return now.toISOString().slice(0, 10);
 }
 
 function pickRandomSolution() {
-  if (!SOLUTIONS.length) {
-    throw new Error("No solutions loaded");
-  }
+  if (!SOLUTIONS.length) throw new Error("No solutions loaded");
   const idx = Math.floor(Math.random() * SOLUTIONS.length);
   return SOLUTIONS[idx];
 }
 
 function pickDailySolution() {
   const today = getTodayString();
-  if (!SOLUTIONS.length) {
-    throw new Error("No solutions loaded");
-  }
+  if (!SOLUTIONS.length) throw new Error("No solutions loaded");
 
   let hash = 0;
   for (const char of today) {
     hash = (hash * 31 + char.charCodeAt(0)) % SOLUTIONS.length;
   }
 
-  return {
-    solution: SOLUTIONS[hash],
-    date: today
-  };
+  return { solution: SOLUTIONS[hash], date: today };
 }
 
 // =====================
 // Word list loading
 // =====================
-//
-// Loads:
-//  - wordle.json           -> SOLUTIONS (answers)
-//  - allowed-guesses.json  -> extra valid guess words
-//
 async function loadWordLists() {
   try {
-    // 1) Load solutions
     const solutionsRes = await fetch("wordle.json");
     if (!solutionsRes.ok) throw new Error("Failed to fetch wordle.json");
-    const solutionsData = await solutionsRes.json(); // array of lowercase
-
+    const solutionsData = await solutionsRes.json();
     const solutionsUpper = solutionsData.map(w => w.toUpperCase());
 
-    // 2) Try to load allowed guesses (optional but recommended)
     let extraGuessesUpper = [];
     try {
       const guessesRes = await fetch("allowed-guesses.json");
       if (guessesRes.ok) {
-        const guessesData = await guessesRes.json(); // lowercase
+        const guessesData = await guessesRes.json();
         extraGuessesUpper = guessesData.map(w => w.toUpperCase());
       } else {
-        console.warn("allowed-guesses.json not found or not ok, using solutions only as guesses");
+        console.warn("allowed-guesses.json not found or not ok; using solutions only");
       }
     } catch (innerErr) {
-      console.warn("Failed to load allowed-guesses.json, using solutions only as guesses", innerErr);
+      console.warn("Failed to load allowed-guesses.json; using solutions only", innerErr);
     }
 
     SOLUTIONS = solutionsUpper;
-    WORD_LIST = solutionsUpper.slice(); // keep for compatibility
+    WORD_LIST = solutionsUpper.slice();
+    VALID_GUESSES = new Set([...solutionsUpper, ...extraGuessesUpper]);
 
-    // Union of solutions + extra guess words
-    const allGuessesSet = new Set([...solutionsUpper, ...extraGuessesUpper]);
-    VALID_GUESSES = allGuessesSet;
-
-    console.log(`Loaded ${SOLUTIONS.length} solutions and ${VALID_GUESSES.size} valid guesses`);
-    console.log(`Hi Michelle!`);
+    console.log(
+      `Loaded ${SOLUTIONS.length} solutions and ${VALID_GUESSES.size} valid guesses`
+    );
   } catch (err) {
-    console.error("Error loading word lists, falling back to small built-in list:", err);
+    console.error("Error loading word lists, falling back:", err);
     WORD_LIST = ["APPLE", "BRAVE", "CRANE", "DRINK", "EARTH"].map(w =>
       w.toUpperCase()
     );
@@ -158,7 +139,7 @@ async function loadWordLists() {
 }
 
 // =====================
-// Settings persistence (mode + colorblind)
+// Settings (mode + colorblind)
 // =====================
 function loadSettings() {
   try {
@@ -213,7 +194,8 @@ function loadStats() {
         stats = {
           ...stats,
           ...parsed,
-          guessDistribution: parsed.guessDistribution || stats.guessDistribution
+          guessDistribution:
+            parsed.guessDistribution || stats.guessDistribution
         };
       }
     }
@@ -227,6 +209,54 @@ function saveStats() {
     localStorage.setItem(STATS_KEY, JSON.stringify(stats));
   } catch (err) {
     console.error("Failed to save stats", err);
+  }
+}
+
+// =====================
+// Daily meta (lock daily puzzle)
+// =====================
+function saveDailyMeta(status) {
+  if (gameMode !== "DAILY") return;
+  const date = solutionDate || getTodayString();
+  const meta = { date, status };
+  try {
+    localStorage.setItem(DAILY_META_KEY, JSON.stringify(meta));
+  } catch (err) {
+    console.error("Failed to save daily meta", err);
+  }
+}
+
+// If today's daily has already been completed (win/lose),
+// force the daily into a locked state (no replay).
+function ensureDailyLock() {
+  if (gameMode !== "DAILY") return;
+
+  try {
+    const raw = localStorage.getItem(DAILY_META_KEY);
+    if (!raw) return;
+
+    const meta = JSON.parse(raw);
+    const today = getTodayString();
+    if (!meta || meta.date !== today) return;
+    if (meta.status === "IN_PROGRESS") return;
+
+    // Lock for today – we do NOT allow replay.
+    const daily = pickDailySolution();
+    solution = daily.solution;
+    solutionDate = daily.date;
+    gameStatus = meta.status;
+
+    // Clear board and guesses so user can't play more,
+    // but they see a fresh locked board.
+    guesses = Array(MAX_GUESSES)
+      .fill("")
+      .map(() => Array(WORD_LENGTH).fill(""));
+    currentRow = 0;
+    currentCol = 0;
+
+    saveGame();
+  } catch (err) {
+    console.error("Failed to enforce daily lock", err);
   }
 }
 
@@ -267,8 +297,45 @@ function normaliseCurrentRow() {
   currentCol = WORD_LENGTH;
 }
 
+// =====================
+// UI helpers for buttons
+// =====================
+function updateButtonsForGameState() {
+  if (!resetButton) return;
+
+  if (gameMode === "DAILY" && gameStatus !== "IN_PROGRESS") {
+    resetButton.disabled = true;
+    resetButton.title =
+      "Daily puzzle already completed. Come back tomorrow.";
+  } else {
+    resetButton.disabled = false;
+    resetButton.title = "";
+  }
+}
+
+// =====================
+// Starting new games
+// =====================
 function startNewGameForCurrentMode() {
   if (gameMode === "DAILY") {
+    // If today's daily is already completed, do NOT create a new one.
+    const raw = localStorage.getItem(DAILY_META_KEY);
+    const today = getTodayString();
+    if (raw) {
+      try {
+        const meta = JSON.parse(raw);
+        if (meta.date === today && meta.status !== "IN_PROGRESS") {
+          // Lock & exit – no replay.
+          ensureDailyLock();
+          updateButtonsForGameState();
+          updateShareButtonState();
+          return;
+        }
+      } catch (e) {
+        console.error("Error reading daily meta", e);
+      }
+    }
+
     const daily = pickDailySolution();
     solution = daily.solution;
     solutionDate = daily.date;
@@ -284,14 +351,12 @@ function startNewGameForCurrentMode() {
     .map(() => Array(WORD_LENGTH).fill(""));
   gameStatus = "IN_PROGRESS";
 
-  // Clear board UI
   document.querySelectorAll(".tile").forEach(tile => {
     tile.className = "tile";
     const inner = tile.querySelector(".tile-inner");
     if (inner) inner.textContent = "";
   });
 
-  // Clear keyboard UI
   document.querySelectorAll(".key").forEach(key => {
     key.classList.remove("correct", "present", "absent");
     delete key.dataset.status;
@@ -300,6 +365,7 @@ function startNewGameForCurrentMode() {
   clearMessage();
   saveGame();
   updateShareButtonState();
+  updateButtonsForGameState();
 }
 
 function loadGame() {
@@ -375,18 +441,13 @@ function createBoard() {
 function createKeyboard() {
   keyboardElement.innerHTML = "";
 
-  const rows = [
-    "QWERTYUIOP",
-    "ASDFGHJKL",
-    "ZXCVBNM"
-  ];
+  const rows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 
   rows.forEach((rowStr, rowIndex) => {
     const rowDiv = document.createElement("div");
     rowDiv.className = "keyboard-row";
 
     if (rowIndex === 2) {
-      // ENTER key at start of bottom row
       const enterBtn = document.createElement("button");
       enterBtn.className = "key wide";
       enterBtn.textContent = "ENTER";
@@ -403,7 +464,6 @@ function createKeyboard() {
     }
 
     if (rowIndex === 2) {
-      // BACKSPACE key at end of bottom row
       const backBtn = document.createElement("button");
       backBtn.className = "key wide";
       backBtn.textContent = "⌫";
@@ -506,19 +566,17 @@ function submitGuess() {
 }
 
 // =====================
-// Result logic (green/yellow/red)
+// Result logic
 // =====================
 function computeResult(guess, answer) {
   const result = Array(WORD_LENGTH).fill("absent");
   const answerCounts = {};
 
-  // Count letters in answer
   for (let i = 0; i < WORD_LENGTH; i++) {
     const letter = answer[i];
     answerCounts[letter] = (answerCounts[letter] || 0) + 1;
   }
 
-  // First pass: correct (green)
   for (let i = 0; i < WORD_LENGTH; i++) {
     if (guess[i] === answer[i]) {
       result[i] = "correct";
@@ -526,7 +584,6 @@ function computeResult(guess, answer) {
     }
   }
 
-  // Second pass: present (yellow)
   for (let i = 0; i < WORD_LENGTH; i++) {
     if (result[i] === "correct") continue;
     const letter = guess[i];
@@ -539,38 +596,6 @@ function computeResult(guess, answer) {
   return result;
 }
 
-// Colour tiles + keys and end game appropriately
-function revealGuess(guess, answer, rowIndex) {
-  const result = computeResult(guess, answer);
-
-  // 1) Update keyboard based on full result first
-  for (let i = 0; i < WORD_LENGTH; i++) {
-    updateKeyboardKey(guess[i], result[i]);
-  }
-
-  // 2) Animate tiles and apply correct/present/absent classes
-  for (let i = 0; i < WORD_LENGTH; i++) {
-    const tile = getTile(rowIndex, i);
-    const inner = tile.querySelector(".tile-inner");
-    const status = result[i];
-
-    setTimeout(() => {
-      tile.classList.add("reveal");
-      setTimeout(() => {
-        tile.classList.remove("reveal");
-        tile.classList.add(status); // hooks into CSS
-        inner.textContent = guess[i];
-      }, FLIP_DURATION / 2);
-    }, i * FLIP_STAGGER);
-  }
-
-  // 3) After animation finishes, handle win/lose
-  setTimeout(() => {
-    handleEndOfGuess(guess, result);
-  }, WORD_LENGTH * FLIP_STAGGER + FLIP_DURATION);
-}
-
-// Prioritise correct > present > absent for keyboard
 function updateKeyboardKey(letter, status) {
   const keyButton = keyboardElement.querySelector(
     `.key[data-key="${letter}"]`
@@ -587,6 +612,33 @@ function updateKeyboardKey(letter, status) {
   }
 }
 
+function revealGuess(guess, answer, rowIndex) {
+  const result = computeResult(guess, answer);
+
+  for (let i = 0; i < WORD_LENGTH; i++) {
+    updateKeyboardKey(guess[i], result[i]);
+  }
+
+  for (let i = 0; i < WORD_LENGTH; i++) {
+    const tile = getTile(rowIndex, i);
+    const inner = tile.querySelector(".tile-inner");
+    const status = result[i];
+
+    setTimeout(() => {
+      tile.classList.add("reveal");
+      setTimeout(() => {
+        tile.classList.remove("reveal");
+        tile.classList.add(status);
+        inner.textContent = guess[i];
+      }, FLIP_DURATION / 2);
+    }, i * FLIP_STAGGER);
+  }
+
+  setTimeout(() => {
+    handleEndOfGuess(guess, result);
+  }, WORD_LENGTH * FLIP_STAGGER + FLIP_DURATION);
+}
+
 function handleEndOfGuess(guess, result) {
   const isWin = result.every(r => r === "correct");
 
@@ -596,31 +648,32 @@ function handleEndOfGuess(guess, result) {
     updateStats(true);
     saveStats();
     saveGame();
+    if (gameMode === "DAILY") saveDailyMeta("WIN");
     updateShareButtonState();
+    updateButtonsForGameState();
     return;
   }
 
-  // Not a win: move to next row
   currentRow++;
 
-  // If we've just used the 6th row, game over (lose)
   if (currentRow >= MAX_GUESSES) {
     gameStatus = "LOSE";
     showMessage(`Out of tries! The word was ${solution.toUpperCase()}`);
     updateStats(false);
     saveStats();
     saveGame();
+    if (gameMode === "DAILY") saveDailyMeta("LOSE");
     updateShareButtonState();
+    updateButtonsForGameState();
     return;
   }
 
-  // Otherwise, next guess from column 0
   currentCol = 0;
   saveGame();
 }
 
 // =====================
-// Stats logic
+// Stats UI
 // =====================
 function updateStats(isWin) {
   stats.played += 1;
@@ -671,7 +724,7 @@ function updateStatsUI() {
 }
 
 // =====================
-// Share grid
+// Share
 // =====================
 function updateShareButtonState() {
   if (!shareButton) return;
@@ -730,9 +783,13 @@ async function shareResult() {
 }
 
 // =====================
-// Mode change & reset
+// Mode + reset
 // =====================
 function resetPuzzle() {
+  if (gameMode === "DAILY" && gameStatus !== "IN_PROGRESS") {
+    showMessage("Daily puzzle already completed. Come back tomorrow.");
+    return;
+  }
   startNewGameForCurrentMode();
 }
 
@@ -743,11 +800,19 @@ function setGameMode(mode) {
   gameMode = mode;
   updateModeButtons();
   saveSettings();
-  startNewGameForCurrentMode();
+
+  if (gameMode === "DAILY") {
+    loadGame();
+    ensureDailyLock();
+  } else {
+    startNewGameForCurrentMode();
+  }
+
+  restoreBoardFromState();
 }
 
 // =====================
-// Modal UI
+// Modal
 // =====================
 function openStats() {
   updateStatsUI();
@@ -815,12 +880,12 @@ function setupEventListeners() {
 }
 
 // =====================
-// Restore UI from saved state
+// Restore UI
 // =====================
 function restoreBoardFromState() {
   updateBoard();
 
-  // Colour already-submitted guesses
+  // Re-colour previously submitted guesses
   for (let row = 0; row < MAX_GUESSES; row++) {
     const guess = wordFromRow(row);
     if (!guess || guess.length !== WORD_LENGTH) continue;
@@ -844,18 +909,20 @@ function restoreBoardFromState() {
   }
 
   updateShareButtonState();
+  updateButtonsForGameState();
 }
 
 // =====================
-// Bootstrap the game
+// Bootstrap
 // =====================
 async function bootstrapGame() {
-  await loadWordLists();      // <-- changed from loadWordList()
+  await loadWordLists();
   loadStats();
   loadSettings();
   createBoard();
   createKeyboard();
   loadGame();
+  ensureDailyLock(); // make sure daily can't be replayed
   setupEventListeners();
   restoreBoardFromState();
 }
