@@ -42,9 +42,9 @@ const shareButton = document.getElementById("share-button");
 // =====================
 // Word lists
 // =====================
-let WORD_LIST = [];      // full list from wordle.json
-let SOLUTIONS = [];      // we use the same list as solutions
-let VALID_GUESSES = new Set(); // for quick lookup
+let WORD_LIST = [];      // keep for compatibility; same as SOLUTIONS
+let SOLUTIONS = [];      // words that can be the answer (from wordle.json)
+let VALID_GUESSES = new Set(); // solutions + allowed-guesses.json
 
 // =====================
 // Game state
@@ -110,17 +110,44 @@ function pickDailySolution() {
 // =====================
 // Word list loading
 // =====================
-async function loadWordList() {
+//
+// Loads:
+//  - wordle.json           -> SOLUTIONS (answers)
+//  - allowed-guesses.json  -> extra valid guess words
+//
+async function loadWordLists() {
   try {
-    const res = await fetch("wordle.json");
-    if (!res.ok) throw new Error("Failed to fetch wordle.json");
+    // 1) Load solutions
+    const solutionsRes = await fetch("wordle.json");
+    if (!solutionsRes.ok) throw new Error("Failed to fetch wordle.json");
+    const solutionsData = await solutionsRes.json(); // array of lowercase
 
-    const data = await res.json(); // array of lowercase words
-    WORD_LIST = data.map(w => w.toUpperCase());
-    SOLUTIONS = WORD_LIST;
-    VALID_GUESSES = new Set(WORD_LIST);
+    const solutionsUpper = solutionsData.map(w => w.toUpperCase());
+
+    // 2) Try to load allowed guesses (optional but recommended)
+    let extraGuessesUpper = [];
+    try {
+      const guessesRes = await fetch("allowed-guesses.json");
+      if (guessesRes.ok) {
+        const guessesData = await guessesRes.json(); // lowercase
+        extraGuessesUpper = guessesData.map(w => w.toUpperCase());
+      } else {
+        console.warn("allowed-guesses.json not found or not ok, using solutions only as guesses");
+      }
+    } catch (innerErr) {
+      console.warn("Failed to load allowed-guesses.json, using solutions only as guesses", innerErr);
+    }
+
+    SOLUTIONS = solutionsUpper;
+    WORD_LIST = solutionsUpper.slice(); // keep for compatibility
+
+    // Union of solutions + extra guess words
+    const allGuessesSet = new Set([...solutionsUpper, ...extraGuessesUpper]);
+    VALID_GUESSES = allGuessesSet;
+
+    console.log(`Loaded ${SOLUTIONS.length} solutions and ${VALID_GUESSES.size} valid guesses`);
   } catch (err) {
-    console.error("Error loading word list, falling back to small list:", err);
+    console.error("Error loading word lists, falling back to small built-in list:", err);
     WORD_LIST = ["APPLE", "BRAVE", "CRANE", "DRINK", "EARTH"].map(w =>
       w.toUpperCase()
     );
@@ -822,7 +849,7 @@ function restoreBoardFromState() {
 // Bootstrap the game
 // =====================
 async function bootstrapGame() {
-  await loadWordList();
+  await loadWordLists();      // <-- changed from loadWordList()
   loadStats();
   loadSettings();
   createBoard();

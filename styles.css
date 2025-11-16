@@ -27,38 +27,73 @@ body {
 }
 
 /* =========================
-   Logo + header text
+   HEADER + LOGO
    ========================= */
 
+.app-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Container inside header (optional extra control if you add this class) */
+.header-inner {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+/* Logo: logo above buttons */
 .game-logo {
-  /* base size: small/mobile */
-  width: 40px;
+  width: 80px;
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.25));
+  transition:
+    transform 0.2s ease-out,
+    filter 0.2s ease-out;
+  animation: logo-pulse 1.2s ease-out 1;
 }
 
-/* tablets / small devices */
+/* Larger on bigger screens */
 @media (min-width: 576px) {
   .game-logo {
     width: 110px;
   }
 }
 
-/* laptops / desktops */
 @media (min-width: 768px) {
   .game-logo {
-    width: 130px;
+    width: 140px;
   }
 }
 
-/* large desktops */
 @media (min-width: 1200px) {
   .game-logo {
-    width: 150px;
+    width: 170px;
   }
 }
 
+/* Hover effect */
+.game-logo:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.35));
+}
+
+/* Pulse on load */
+@keyframes logo-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* If you ever use these again, keep them sane */
 .game-title {
   letter-spacing: 0.12em;
 }
@@ -68,16 +103,31 @@ body {
 }
 
 /* =========================
-   Settings bar
+   SETTINGS BAR
    ========================= */
 
 .settings-bar {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 0.35rem;
+  padding: 0.5rem 0;
+}
+
+/* Make controls line up nicely */
+.settings-bar .form-check-input {
+  cursor: pointer;
+}
+
+.settings-bar .form-check-label {
+  font-size: 0.85rem;
+}
+
+.settings-bar .btn-group .btn,
+.settings-bar #share-button {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
 }
 
 /* =========================
-   Board
+   BOARD
    ========================= */
 
 .board {
@@ -86,7 +136,7 @@ body {
   grid-gap: 0.25rem;
   width: 100%;
   max-width: 360px;
-  margin-top: 0.25rem;
+  margin-top: 0.5rem;
 }
 
 .board-row {
@@ -153,7 +203,7 @@ body {
 }
 
 /* =========================
-   Keyboard
+   KEYBOARD
    ========================= */
 
 .keyboard {
@@ -214,7 +264,7 @@ body {
 }
 
 /* =========================
-   Modal (custom)
+   MODAL (stats)
    ========================= */
 
 .modal-backdrop {
@@ -244,7 +294,7 @@ body {
 }
 
 /* =========================
-   Guess distribution
+   GUESS DISTRIBUTION
    ========================= */
 
 .guess-distribution {
@@ -277,7 +327,7 @@ body {
 }
 
 /* =========================
-   Utility
+   UTILITY
    ========================= */
 
 .d-none {
@@ -296,7 +346,7 @@ body {
 }
 
 /* =========================
-   Color-blind mode
+   COLOR-BLIND MODE
    ========================= */
 
 body.colorblind {
