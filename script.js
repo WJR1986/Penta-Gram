@@ -146,6 +146,7 @@ async function loadWordLists() {
     VALID_GUESSES = allGuessesSet;
 
     console.log(`Loaded ${SOLUTIONS.length} solutions and ${VALID_GUESSES.size} valid guesses`);
+    console.log(`Hi Michelle!`);
   } catch (err) {
     console.error("Error loading word lists, falling back to small built-in list:", err);
     WORD_LIST = ["APPLE", "BRAVE", "CRANE", "DRINK", "EARTH"].map(w =>
