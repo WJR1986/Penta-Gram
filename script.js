@@ -110,7 +110,7 @@ async function loadWordLists() {
 
     let extraGuessesUpper = [];
     try {
-      const guessesRes = await fetch("allowed-guesses.json");
+      const guessesRes = await fetch("/allowed-guesses.json");
       if (guessesRes.ok) {
         const guessesData = await guessesRes.json();
         extraGuessesUpper = guessesData.map(w => w.toUpperCase());
