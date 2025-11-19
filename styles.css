@@ -50,6 +50,7 @@ body {
     transform 0.2s ease-out,
     filter 0.2s ease-out;
   animation: logo-pulse 1.2s ease-out 1;
+  padding-bottom: 0.25rem;
 }
 
 /* Larger on bigger screens */
